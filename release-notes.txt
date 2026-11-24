@@ -1,4 +1,3 @@
-- Uygulama içi güncelleme: yeni sürüm çıkınca açılışta sorar, tek tuşla indirip kurar
-- Oyuna girmeden altyazı ayar ekranı (hazır ayarlar ve örnek görüntü)
-- Kodu değiştirme / çıkış seçeneği
-- Kod kapatılırsa oyun içinde uyarı
+- Ayarlar → Hakkında: kaynak kodu bağlantısı Efex Sub'a yönlendirildi, emeği geçenlere Momiji eklendi
+- Momiji'den kalan bağış ve geri bildirim istemleri kaldırıldı
+- Gizlilik bilgisi Efex Sub'a göre güncellendi
