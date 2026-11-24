@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Efex Sub: ayar ekranındaki temsili oyun görüntüsü (gün batımı, şehir silueti yerine düz şeritler) -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#2B1B47" android:centerColor="#C2566B" android:endColor="#F2A65A" />
+        </shape>
+    </item>
+    <item android:top="160dp">
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#1E2430" android:endColor="#0E1117" />
+        </shape>
+    </item>
+</layer-list>

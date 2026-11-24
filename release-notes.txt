@@ -1,0 +1,4 @@
+- Uygulama içi güncelleme: yeni sürüm çıkınca açılışta sorar, tek tuşla indirip kurar
+- Oyuna girmeden altyazı ayar ekranı (hazır ayarlar ve örnek görüntü)
+- Kodu değiştirme / çıkış seçeneği
+- Kod kapatılırsa oyun içinde uyarı

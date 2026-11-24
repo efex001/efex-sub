@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Efex Sub: arkadaş kodu ile giriş -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/efex_bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="32dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/poppins_bold"
+                android:text="Efex"
+                android:textColor="@color/efex_text"
+                android:textSize="40sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="@font/poppins_bold"
+                android:text="Sub"
+                android:textColor="@color/efex_accent"
+                android:textSize="40sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Sana verilen arkadaş kodunu gir"
+            android:textColor="@color/efex_text"
+            android:textSize="20sp" />
+
+        <EditText
+            android:id="@+id/codeInput"
+            android:layout_width="420dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/efex_field"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:hint="EFEX-XXXX-XXXX"
+            android:imeOptions="actionDone"
+            android:importantForAutofill="no"
+            android:inputType="textCapCharacters|textNoSuggestions"
+            android:maxLength="20"
+            android:padding="16dp"
+            android:singleLine="true"
+            android:textColor="@color/efex_accent"
+            android:textColorHint="#55FFFFFF"
+            android:textSize="24sp" />
+
+        <Button
+            android:id="@+id/loginButton"
+            android:layout_width="420dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/efex_button"
+            android:fontFamily="@font/poppins_medium"
+            android:padding="14dp"
+            android:text="Giriş"
+            android:textAllCaps="false"
+            android:textColor="#111111"
+            android:textSize="20sp" />
+
+        <ProgressBar
+            android:id="@+id/loginProgress"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginTop="16dp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/loginStatus"
+            android:layout_width="420dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:textColor="@color/efex_bad"
+            android:textSize="16sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="36dp"
+            android:letterSpacing="0.18"
+            android:text="prod. by Efekan Uçan"
+            android:textAllCaps="true"
+            android:textColor="@color/efex_dim"
+            android:textSize="12sp" />
+    </LinearLayout>
+</ScrollView>

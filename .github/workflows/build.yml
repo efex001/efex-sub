@@ -1,0 +1,98 @@
+name: Efex Sub APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      EFEX_KEYSTORE: ${{ github.workspace }}/efex-release.jks
+      EFEX_KEY_ALIAS: efexsub
+      EFEX_KEYSTORE_PW: ${{ secrets.EFEX_KEYSTORE_PW }}
+      EFEX_KEY_PW: ${{ secrets.EFEX_KEYSTORE_PW }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: İmza anahtarı
+        env:
+          KEYSTORE_B64: ${{ secrets.EFEX_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$EFEX_KEYSTORE_PW" ]; then
+            echo "::error::GitHub Secrets ayarlanmamış: EFEX_KEYSTORE_B64 ve EFEX_KEYSTORE_PW gerekli (Settings → Secrets and variables → Actions)"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$EFEX_KEYSTORE"
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # oboe alt modülündeki örnek projelerin wrapper'ları doğrulamayı bozuyor
+          validate-wrappers: false
+
+      - name: protoc ve nanopb için Python paketleri
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq protobuf-compiler python3-protobuf > /dev/null
+          protoc --version
+
+      - name: Android NDK ve CMake
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.1.10909125" "cmake;3.22.1" > /dev/null
+
+      - name: APK derle
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleFdroidRelease --stacktrace --no-daemon
+
+      - name: Sürüm bilgisi
+        id: ver
+        run: |
+          CODE=$(grep -m1 -oP 'versionCode \K[0-9]+' android/app/build.gradle)
+          NAME=$(grep -m1 -oP 'versionName "\K[^"]+' android/app/build.gradle)
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          mkdir -p out
+          cp android/app/build/outputs/apk/fdroid/release/*.apk out/efex-sub.apk
+          python3 - "$CODE" "$NAME" <<'PY'
+          import json, sys, pathlib
+          code, name = int(sys.argv[1]), sys.argv[2]
+          notes = pathlib.Path("release-notes.txt").read_text(encoding="utf-8").strip() if pathlib.Path("release-notes.txt").exists() else ""
+          repo = "${{ github.repository }}"
+          info = {"versionCode": code, "versionName": name,
+                  "apk": f"https://github.com/{repo}/releases/download/v{name}/efex-sub.apk",
+                  "notes": notes}
+          pathlib.Path("out/version.json").write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+          print(json.dumps(info, ensure_ascii=False, indent=2))
+          PY
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: efex-sub-apk
+          path: out/*
+
+      - name: Sürümü yayınla (TV'deki güncelleme bildirimi buradan okur)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.ver.outputs.name }}"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "$TAG zaten yayınlanmış; yeni sürüm için versionCode/versionName artırılmalı."
+          else
+            gh release create "$TAG" out/efex-sub.apk out/version.json \
+              --title "Efex Sub ${{ steps.ver.outputs.name }}" \
+              --notes-file release-notes.txt --latest
+          fi

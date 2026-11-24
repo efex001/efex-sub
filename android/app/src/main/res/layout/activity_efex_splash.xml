@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Efex Sub: animasyonlu açılış ekranı -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/splashRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/efex_bg">
+
+    <LinearLayout
+        android:id="@+id/logoGroup"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/logoEfex"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/poppins_bold"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.02"
+                android:text="Efex"
+                android:textColor="@color/efex_text"
+                android:textSize="72sp" />
+
+            <TextView
+                android:id="@+id/logoSub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:fontFamily="@font/poppins_bold"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.02"
+                android:text="Sub"
+                android:textColor="@color/efex_accent"
+                android:textSize="72sp" />
+        </LinearLayout>
+
+        <View
+            android:id="@+id/logoBar"
+            android:layout_width="220dp"
+            android:layout_height="5dp"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/efex_bar" />
+
+        <TextView
+            android:id="@+id/logoCredit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:fontFamily="@font/poppins_medium"
+            android:letterSpacing="0.18"
+            android:text="prod. by Efekan Uçan"
+            android:textAllCaps="true"
+            android:textColor="@color/efex_dim"
+            android:textSize="15sp" />
+    </LinearLayout>
+</FrameLayout>

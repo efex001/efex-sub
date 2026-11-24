@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="efex_bg">#0B0D10</color>
+    <color name="efex_card">#151920</color>
+    <color name="efex_line">#252B35</color>
+    <color name="efex_text">#E8ECF1</color>
+    <color name="efex_dim">#8B95A3</color>
+    <color name="efex_accent">#FFB020</color>
+    <color name="efex_bad">#FF5C5C</color>
+    <color name="efex_sub_bg">#E6000000</color>
+</resources>

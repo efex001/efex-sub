@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Efex Sub: oyuna girmeden altyazı ayarı -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/efex_bg"
+    android:orientation="horizontal"
+    android:padding="24dp">
+
+    <ScrollView
+        android:layout_width="400dp"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/poppins_bold"
+                android:text="Altyazı ayarları"
+                android:textColor="@color/efex_text"
+                android:textSize="24sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Sağdaki örnek görüntüde turuncu çerçeve okunan bölge. İngilizce altyazıyı içine alacak şekilde ayarla, Türkçe altyazının yerini ve boyutunu seç."
+                android:textColor="@color/efex_dim"
+                android:textSize="13sp" />
+
+            <FrameLayout
+                android:id="@+id/formContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/saveButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/efex_button"
+                    android:fontFamily="@font/poppins_medium"
+                    android:text="Kaydet"
+                    android:textAllCaps="false"
+                    android:textColor="#111111" />
+
+                <Button
+                    android:id="@+id/cancelButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:backgroundTint="@color/efex_line"
+                    android:text="Vazgeç"
+                    android:textAllCaps="false"
+                    android:textColor="@color/efex_text" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/versionInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:lineSpacingExtra="2dp"
+                android:textColor="@color/efex_dim"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginStart="24dp"
+        android:layout_weight="1">
+
+        <FrameLayout
+            android:id="@+id/previewVideo"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="@drawable/efex_preview_scene"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintDimensionRatio="16:9"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <View
+                android:id="@+id/previewMinimap"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:layout_gravity="bottom|start"
+                android:background="@drawable/efex_minimap" />
+
+            <TextView
+                android:id="@+id/previewEnglish"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
+                android:shadowColor="#FF000000"
+                android:shadowRadius="4"
+                android:text="Get in the car, we gotta go!"
+                android:textColor="#FFFFFF" />
+
+            <View
+                android:id="@+id/previewRegion"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:layout_gravity="top|start"
+                android:background="@drawable/efex_region_frame" />
+
+            <TextView
+                android:id="@+id/previewTurkish"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
+                android:background="@drawable/efex_subtitle_bg"
+                android:fontFamily="@font/poppins_medium"
+                android:gravity="center"
+                android:paddingStart="12dp"
+                android:paddingTop="5dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="6dp"
+                android:text="Arabaya bin, gitmemiz lazım!"
+                android:textColor="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:layout_margin="8dp"
+                android:background="#88000000"
+                android:padding="4dp"
+                android:text="Örnek görüntü · oyunda ince ayar yapılabilir"
+                android:textColor="#CCFFFFFF"
+                android:textSize="11sp" />
+        </FrameLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>
