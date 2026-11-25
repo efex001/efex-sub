@@ -51,6 +51,7 @@ globalThis.fetch = async (url, init) => {
     if (b === "notfound") return new Response('{"error":{"code":404,"message":"model not found"}}', { status: 404 });
     if (b === "quota") return new Response('{"error":{"code":429}}', { status: 429 });
     if (b === "empty") return sse([{ candidates: [{ content: { parts: [{ text: "x" }] } }] }]);
+    if (b === "long") return sse([{ candidates: [{ content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: pcmB64(48000 * 12, 3) } }] } }] }]);
     return sse([
       { candidates: [{ content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: pcmB64(3000, 1) } }] } }] },
       { candidates: [{ content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: pcmB64(2000, 2) } }] } }] },
@@ -106,7 +107,7 @@ const t = async (name, fn) => { calls.length = 0; await fn(); passed++; console.
 
 // ---------------------------------------------------------------- temel
 await t("ping çalışıyor", async () => {
-  assert.equal((await call("/api/ping", { method: "GET" })).data.version, "0.6.0");
+  assert.equal((await call("/api/ping", { method: "GET" })).data.version, "0.6.1");
 });
 
 await t("panel sayfası geliyor ve içindeki JS hatasız", async () => {
@@ -268,8 +269,8 @@ await t("dublaj: ilk model yoksa sıradakiyle akışlı ses gelir, havuza girer"
   assert.equal(r.headers.get("x-efex-cached"), "0");
   assert.deepEqual(ttsCalls.map((c) => c.model), ["gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"]);
   assert.equal(ttsCalls[1].voice, "Charon");
-  assert.match(ttsCalls[1].prompt, /bağırır gibi/);
-  assert.match(ttsCalls[1].prompt, /Arabaya bin!/);
+  // Kısa yönlendirme + iki nokta + metin (Google'ın kalıbı); uzun talimat yok
+  assert.equal(ttsCalls[1].prompt, "Shout tensely and loudly in Turkish, as a mature man with a deep, gravelly voice: Arabaya bin!");
 });
 
 await t("dublaj: aynı replik ikinci kez havuzdan anında gelir, Google'a gitmez", async () => {
@@ -312,6 +313,18 @@ await t("dublaj: TTS_MODEL önce denenir", async () => {
   await member("/api/speak", { text: "Özel model", voice: "Leda", persona: "woman_high" }, code);
   assert.equal(ttsCalls[0].model, "ozel-tts");
   delete env.TTS_MODEL;
+});
+
+await t("dublaj: metne göre çok uzun ses havuza girmez, panelde uyarı", async () => {
+  ttsBehavior["gemini-3.8-flash-tts"] = "long";
+  const r = await member("/api/speak", { text: "Kısa cümle", voice: "Orus", persona: "man_low" }, code);
+  assert.equal(r.status, 200);
+  const o = await admin("overview");
+  assert.match(o.data.ttsStatus.value, /^bad_output\|/);
+  ttsCalls.length = 0;
+  ttsBehavior["gemini-3.8-flash-tts"] = "ok";
+  const again = await member("/api/speak", { text: "Kısa cümle", voice: "Orus", persona: "man_low" }, code);
+  assert.equal(again.headers.get("x-efex-cached"), "0"); // havuzda yoktu, yeniden üretildi
 });
 
 await t("dublaj: panel istatistikleri", async () => {

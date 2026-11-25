@@ -25,7 +25,7 @@
  * IP başına 10 denemede 30 dk kilitlenir.
  */
 
-const VERSION = "0.6.0";
+const VERSION = "0.6.1";
 const MAX_LINES_PER_REQUEST = 8;
 const MAX_LINE_LENGTH = 400;
 
@@ -168,6 +168,8 @@ async function ensureSchema(db) {
     "ALTER TABLE usage ADD COLUMN tts_lines INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE usage ADD COLUMN tts_cached INTEGER NOT NULL DEFAULT 0",
   ];
+  // Eski sürüm ses havuzu kayıtlarını sil (0.6.0'da yönlendirme de okunuyordu)
+  migrations.push("DELETE FROM audio WHERE style NOT LIKE '%/v2'");
   for (const m of migrations) {
     try {
       await db.prepare(m).run();
@@ -572,19 +574,24 @@ export const VOICES = {
 };
 const ALL_VOICES = new Set(Object.values(VOICES).flat());
 
+// Ses modeline verilen yönlendirme. Google'ın belgelerindeki kısa kalıp kullanılır
+// ("Say cheerfully: …"): iki noktadan önceki kısım yönlendirme, sonrası okunacak metin.
+// Uzun talimatlar modele okutuluyordu (0.6.0 hatası).
 const PERSONA_TEXT = {
-  man_low: "kalın ve tok sesli, olgun bir adam",
-  man_mid: "orta tonda sesli bir adam",
-  man_high: "genç, ince sesli bir adam",
-  woman_low: "kalın sesli, olgun bir kadın",
-  woman_mid: "orta tonda sesli bir kadın",
-  woman_high: "genç, ince sesli bir kadın",
+  man_low: "as a mature man with a deep, gravelly voice",
+  man_mid: "as an adult man with a medium-pitched voice",
+  man_high: "as a young man with a lighter voice",
+  woman_low: "as a mature woman with a low voice",
+  woman_mid: "as an adult woman with a medium-pitched voice",
+  woman_high: "as a young woman with a bright voice",
 };
 const STYLE_TEXT = {
-  normal: "doğal, sohbet eder gibi",
-  loud: "yüksek sesle, gergin ve enerjik, bağırır gibi",
-  quiet: "alçak sesle, sakin, neredeyse fısıldar gibi",
+  normal: "Say naturally and casually in Turkish",
+  loud: "Shout tensely and loudly in Turkish",
+  quiet: "Say quietly, almost whispering, in Turkish",
 };
+/** Havuz sürümü: değişince eski (hatalı) sesler kullanılmaz ve silinir */
+const AUDIO_POOL_VERSION = "v2";
 const TTS_RATE = 24000;
 const MAX_AUDIO_BYTES = 1_900_000;
 
@@ -629,7 +636,7 @@ async function* sseAudioChunks(body) {
 
 /** Bir modelle seslendirmeyi başlatır; ilk ses parçası gelene kadar bekler (gelmezse sıradaki model) */
 async function startTts(text, voice, persona, style, env) {
-  const prompt = `Bir video oyunu karakterini Türkçe seslendiriyorsun: ${PERSONA_TEXT[persona]}. Ton: ${STYLE_TEXT[style]}. Yalnızca şu repliği oku: ${text}`;
+  const prompt = `${STYLE_TEXT[style]}, ${PERSONA_TEXT[persona]}: ${text}`;
   const details = [];
   let sawQuota = false;
   for (const model of ttsModels(env)) {
@@ -688,7 +695,7 @@ async function handleSpeak(request, env, ctx) {
   if (!ALL_VOICES.has(voice) || !PERSONA_TEXT[persona]) return err("Geçersiz ses");
 
   const day = today();
-  const hash = await sha256(`${voice}|${persona}|${style}|${text}`);
+  const hash = await sha256(`${AUDIO_POOL_VERSION}|${voice}|${persona}|${style}|${text}`);
   const later = (p) => (ctx?.waitUntil ? ctx.waitUntil(p) : p);
   const countUsage = (chars, cached) =>
     db
@@ -746,13 +753,18 @@ async function handleSpeak(request, env, ctx) {
       try { await writer.close(); } catch {}
     }
     await countUsage(text.length, false);
-    if (complete && total > 1000 && total <= MAX_AUDIO_BYTES) {
+    // Güvenlik: ses, metne göre beklenenden çok uzunsa (model yönlendirmeyi de okuduysa) havuza girmez
+    const seconds = total / (TTS_RATE * 2);
+    const expectedMax = 2 + text.length * 0.12;
+    const plausible = seconds <= expectedMax;
+    if (!plausible) await setStatus(db, "tts", `bad_output|gemini|${started.model}: ${seconds.toFixed(1)} sn ses, ${text.length} karakterlik metin için fazla uzun`);
+    if (complete && plausible && total > 1000 && total <= MAX_AUDIO_BYTES) {
       const pcm = new Uint8Array(total);
       let off = 0;
       for (const p of parts) { pcm.set(p, off); off += p.length; }
       await db
         .prepare("INSERT OR IGNORE INTO audio (hash, text, voice, style, rate, pcm, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(hash, text, voice, `${persona}/${style}`, TTS_RATE, pcm.buffer, started.model, nowIso())
+        .bind(hash, text, voice, `${persona}/${style}/${AUDIO_POOL_VERSION}`, TTS_RATE, pcm.buffer, started.model, nowIso())
         .run();
     }
   })();
