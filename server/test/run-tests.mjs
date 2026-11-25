@@ -107,7 +107,7 @@ const t = async (name, fn) => { calls.length = 0; await fn(); passed++; console.
 
 // ---------------------------------------------------------------- temel
 await t("ping çalışıyor", async () => {
-  assert.equal((await call("/api/ping", { method: "GET" })).data.version, "0.6.1");
+  assert.equal((await call("/api/ping", { method: "GET" })).data.version, "0.6.2");
 });
 
 await t("panel sayfası geliyor ve içindeki JS hatasız", async () => {
@@ -269,8 +269,8 @@ await t("dublaj: ilk model yoksa sıradakiyle akışlı ses gelir, havuza girer"
   assert.equal(r.headers.get("x-efex-cached"), "0");
   assert.deepEqual(ttsCalls.map((c) => c.model), ["gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"]);
   assert.equal(ttsCalls[1].voice, "Charon");
-  // Kısa yönlendirme + iki nokta + metin (Google'ın kalıbı); uzun talimat yok
-  assert.equal(ttsCalls[1].prompt, "Shout tensely and loudly in Turkish, as a mature man with a deep, gravelly voice: Arabaya bin!");
+  // Modele sadece Türkçe replik gider (yönlendirme okunuyordu)
+  assert.equal(ttsCalls[1].prompt, "Arabaya bin!");
 });
 
 await t("dublaj: aynı replik ikinci kez havuzdan anında gelir, Google'a gitmez", async () => {
@@ -282,6 +282,14 @@ await t("dublaj: aynı replik ikinci kez havuzdan anında gelir, Google'a gitmez
   assert.equal(r.bytes[0], 1);
   assert.equal(r.bytes[4999], 2);
   assert.equal(ttsCalls.length, 0);
+});
+
+await t("dublaj: yüksek tonlu replik ünlemle biter, başka hiçbir yönlendirme eklenmez", async () => {
+  ttsCalls.length = 0;
+  await member("/api/speak", { text: "Hemen gidiyoruz.", voice: "Orus", persona: "man_low", style: "loud" }, code);
+  assert.equal(ttsCalls.at(-1).prompt, "Hemen gidiyoruz!");
+  await member("/api/speak", { text: "Sessiz ol.", voice: "Orus", persona: "man_low", style: "quiet" }, code);
+  assert.equal(ttsCalls.at(-1).prompt, "Sessiz ol.");
 });
 
 await t("dublaj: farklı ses ya da ton ayrı üretilir", async () => {

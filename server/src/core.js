@@ -25,7 +25,7 @@
  * IP başına 10 denemede 30 dk kilitlenir.
  */
 
-const VERSION = "0.6.1";
+const VERSION = "0.6.2";
 const MAX_LINES_PER_REQUEST = 8;
 const MAX_LINE_LENGTH = 400;
 
@@ -169,7 +169,7 @@ async function ensureSchema(db) {
     "ALTER TABLE usage ADD COLUMN tts_cached INTEGER NOT NULL DEFAULT 0",
   ];
   // Eski sürüm ses havuzu kayıtlarını sil (0.6.0'da yönlendirme de okunuyordu)
-  migrations.push("DELETE FROM audio WHERE style NOT LIKE '%/v2'");
+  migrations.push("DELETE FROM audio WHERE style NOT LIKE '%/v3'");
   for (const m of migrations) {
     try {
       await db.prepare(m).run();
@@ -574,9 +574,10 @@ export const VOICES = {
 };
 const ALL_VOICES = new Set(Object.values(VOICES).flat());
 
-// Ses modeline verilen yönlendirme. Google'ın belgelerindeki kısa kalıp kullanılır
-// ("Say cheerfully: …"): iki noktadan önceki kısım yönlendirme, sonrası okunacak metin.
-// Uzun talimatlar modele okutuluyordu (0.6.0 hatası).
+// Not: Gemini API'deki ses modeli, metne eklenen her yönlendirmeyi (Türkçe ya da İngilizce)
+// sesli okudu ve İngilizce yönlendirme Türkçe telaffuzu bozdu (0.6.0 ve 0.6.1 testleri).
+// Bu yüzden modele SADECE Türkçe replik gönderilir; karakter, seçilen sesle verilir.
+// Aşağıdaki açıklamalar ileride yönlendirmeyi ayrı alanda alan servise geçilirse kullanılacak.
 const PERSONA_TEXT = {
   man_low: "as a mature man with a deep, gravelly voice",
   man_mid: "as an adult man with a medium-pitched voice",
@@ -591,7 +592,7 @@ const STYLE_TEXT = {
   quiet: "Say quietly, almost whispering, in Turkish",
 };
 /** Havuz sürümü: değişince eski (hatalı) sesler kullanılmaz ve silinir */
-const AUDIO_POOL_VERSION = "v2";
+const AUDIO_POOL_VERSION = "v3";
 const TTS_RATE = 24000;
 const MAX_AUDIO_BYTES = 1_900_000;
 
@@ -636,7 +637,8 @@ async function* sseAudioChunks(body) {
 
 /** Bir modelle seslendirmeyi başlatır; ilk ses parçası gelene kadar bekler (gelmezse sıradaki model) */
 async function startTts(text, voice, persona, style, env) {
-  const prompt = `${STYLE_TEXT[style]}, ${PERSONA_TEXT[persona]}: ${text}`;
+  // Sadece replik: yüksek sesle söylenen replik ünlemle biter ki model tonu oradan alsın
+  const prompt = style === "loud" && !/[!?]$/.test(text) ? text.replace(/[.…]+$/, "") + "!" : text;
   const details = [];
   let sawQuota = false;
   for (const model of ttsModels(env)) {
