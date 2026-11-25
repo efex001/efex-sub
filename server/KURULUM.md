@@ -42,6 +42,7 @@ Worker sayfası → **Settings → Variables and Secrets → Add**
 
 İsteğe bağlı:
 - `DEFAULT_DAILY_LIMIT` → yeni kodlar için kişi başı günlük karakter hakkı. Yazmazsan **60000** (yaklaşık 1.300 yeni cümle, günde 3–4 saat yoğun oyun; en kötü durumda kişi başı günde yaklaşık 0,25 USD).
+- `TTS_MODEL` → dublaj (beta) için Gemini ses modeli. Yazmazsan sırayla `gemini-3.8-flash-lite-tts`, `gemini-3.8-flash-tts`, `gemini-2.5-flash-preview-tts` denenir. Panelde "Dublaj (beta)" uyarısı çıkarsa Google'ın mesajına bakıp buraya güncel model adını yaz.
 - `GEMINI_MODEL` / `GEMINI_FALLBACK_MODEL` → Google model adlarını değiştirirse buradan güncellenir. Varsayılanlar: `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite`. Panelde "model bulunamadı" uyarısı görürsen AI Studio'daki güncel Flash-Lite adını `GEMINI_MODEL`'e yaz.
 
 ## 7. Dene
@@ -55,6 +56,11 @@ Worker sayfası → **Settings → Variables and Secrets → Add**
 1. **Ortak havuz** — daha önce çevrilmiş cümle anında ve bedava gelir, haktan düşmez.
 2. **Senin anahtarın** — önce yeni Flash-Lite modeli, o yoğunsa ya da tıkanırsa bir önceki Flash-Lite modeli.
 3. Arkadaşın günlük hakkı dolarsa ya da Google tarafında sorun olursa yeni cümleler çevrilmez; TV'de orijinal İngilizce altyazı görünür ve küçük bir uyarı çıkar. Havuzdaki cümleler gelmeye devam eder. Günlük haklar Türkiye saatiyle gece yarısı yenilenir.
+
+## Dublaj (beta)
+- TV uygulamasında altyazı ayarlarından açılır, varsayılan olarak kapalıdır.
+- Ses Gemini ile üretilir ve **ses havuzunda** saklanır: aynı replik aynı sesle ikinci kez istendiğinde Google'a gitmez, anında ve ücretsiz gelir.
+- Dublaj da günlük karakter hakkından düşer (çeviriyle ortak).
 
 ## Güvenlik
 - Panel şifresi IP başına 5 yanlış denemede 30 dakika kilitlenir; doğru şifre de o süre boyunca reddedilir.

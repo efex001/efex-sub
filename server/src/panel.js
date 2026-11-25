@@ -61,6 +61,8 @@ const ADMIN_HTML = `<!DOCTYPE html>
     <div class="stat"><b id="sCached">0</b><span>havuzdan bedava geldi</span></div>
     <div class="stat"><b id="sDevice">0</b><span>çevrilemedi (İngilizce kaldı)</span></div>
     <div class="stat"><b id="sChars">0</b><span>çevrilen karakter (ücretli)</span></div>
+    <div class="stat"><b id="sTts">0</b><span>dublaj satırı (beta)</span></div>
+    <div class="stat"><b id="sTtsCached">0</b><span>dublaj havuzdan geldi</span></div>
   </div>
   <div class="card sub" id="engine"></div>
 
@@ -119,14 +121,25 @@ async function load(){
   $("sCached").textContent = fmt(d.today.cached);
   $("sDevice").textContent = fmt(d.today.device_lines);
   $("sChars").textContent = fmt(d.today.chars);
+  $("sTts").textContent = fmt(d.today.tts_lines);
+  $("sTtsCached").textContent = fmt(d.today.tts_cached);
   $("engine").innerHTML = "Modeller: <b>" + esc(d.models.join(" → ")) + "</b><br>Gemini anahtarı: " +
-    (d.keyConfigured ? '<span class="k-ok">tanımlı</span>' : '<span class="k-bad">tanımlı değil — Cloudflare ayarlarına GEMINI_KEY ekle</span>');
+    (d.keyConfigured ? '<span class="k-ok">tanımlı</span>' : '<span class="k-bad">tanımlı değil — Cloudflare ayarlarına GEMINI_KEY ekle</span>') +
+    "<br>Dublaj (beta) modelleri: <b>" + esc(d.ttsModels.join(" → ")) + "</b>" +
+    "<br>Ses havuzu: " + fmt(d.audioPool.n) + " replik · " + (d.audioPool.bytes / 1048576).toFixed(1) + " MB";
   const w = [];
   if (d.serverStatus && !String(d.serverStatus.value).startsWith("ok")) {
     const parts = String(d.serverStatus.value).split("|");
     const kind = parts[0], detail = parts.slice(2).join("|");
     w.push("<b>Gemini anahtarı:</b> " + esc(REASONS[kind] || kind) + " (" + esc(ago(d.serverStatus.updated_at)) + ")" +
       (detail ? '<div class="sub" style="margin-top:6px;word-break:break-word">Google mesajı: ' + esc(detail) + '</div>' : ""));
+  }
+  if (d.ttsStatus && !String(d.ttsStatus.value).startsWith("ok")) {
+    const tp = String(d.ttsStatus.value).split("|");
+    const td = tp.slice(2).join("|");
+    w.push("<b>Dublaj (beta):</b> " + esc(REASONS[tp[0]] || tp[0]) + " (" + esc(ago(d.ttsStatus.updated_at)) + ")" +
+      (td ? '<div class="sub" style="margin-top:6px;word-break:break-word">Google mesajı: ' + esc(td) + '</div>' : "") +
+      '<div class="sub">Model adı değiştiyse Cloudflare ayarlarına TTS_MODEL değişkeni ekle.</div>');
   }
   if (d.weakPassword) w.push("<b>Panel şifren kısa:</b> Cloudflare'de ADMIN_PASSWORD'ü en az 12 karakterlik bir şifreyle değiştir.");
   if (!d.hiddenPath) w.push("<b>Panel adresi tahmin edilebilir:</b> Cloudflare'e ADMIN_PATH değişkeni ekleyip paneli gizli bir adrese taşı.");

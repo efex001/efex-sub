@@ -6,9 +6,16 @@ import worker from "../worker.js";
 // ---- D1 taklidi
 function makeD1() {
   const sql = new DatabaseSync(":memory:");
+  // D1 gibi: ArrayBuffer'ı BLOB olarak kabul eder, BLOB'u sayı dizisi olarak döndürür
+  const toSql = (v) => (v instanceof ArrayBuffer ? new Uint8Array(v) : v);
+  const fromSql = (row) => {
+    if (!row) return row;
+    for (const k of Object.keys(row)) if (row[k] instanceof Uint8Array) row[k] = Array.from(row[k]);
+    return row;
+  };
   const wrap = (query, params = []) => ({
-    bind: (...p) => wrap(query, p),
-    async first() { return sql.prepare(query).get(...params) ?? null; },
+    bind: (...p) => wrap(query, p.map(toSql)),
+    async first() { return fromSql(sql.prepare(query).get(...params)) ?? null; },
     async all() { return { results: sql.prepare(query).all(...params) }; },
     async run() { sql.prepare(query).run(...params); return { success: true }; },
     _exec() { sql.prepare(query).run(...params); },
@@ -24,9 +31,31 @@ function makeD1() {
 // keyBehavior[key] = "ok" | "quota" | "invalid" | "server" | { [model]: davranış }
 const keyBehavior = {};
 const calls = [];
+// ---- sahte Gemini TTS: modele göre davranış ("ok" | "notfound" | "quota" | "empty")
+const ttsBehavior = {};
+const ttsCalls = [];
+function sse(events) {
+  const text = events.map((e) => "data: " + JSON.stringify(e) + "\r\n\r\n").join("");
+  return new Response(new ReadableStream({ start(c) { const b = new TextEncoder().encode(text); c.enqueue(b.slice(0, 7)); c.enqueue(b.slice(7)); c.close(); } }), { status: 200 });
+}
+const pcmB64 = (n, v) => Buffer.from(new Uint8Array(n).fill(v)).toString("base64");
+
 globalThis.fetch = async (url, init) => {
   const u = String(url);
   assert.ok(u.includes("generativelanguage.googleapis.com"), "beklenmeyen adres: " + u);
+  if (u.includes(":streamGenerateContent")) {
+    const model = decodeURIComponent(u.match(/models\/([^:]+):/)[1]);
+    const body = JSON.parse(init.body);
+    ttsCalls.push({ model, voice: body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, prompt: body.contents[0].parts[0].text });
+    const b = ttsBehavior[model] ?? "notfound";
+    if (b === "notfound") return new Response('{"error":{"code":404,"message":"model not found"}}', { status: 404 });
+    if (b === "quota") return new Response('{"error":{"code":429}}', { status: 429 });
+    if (b === "empty") return sse([{ candidates: [{ content: { parts: [{ text: "x" }] } }] }]);
+    return sse([
+      { candidates: [{ content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: pcmB64(3000, 1) } }] } }] },
+      { candidates: [{ content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: pcmB64(2000, 2) } }] } }] },
+    ]);
+  }
   const model = decodeURIComponent(u.match(/models\/([^:]+):/)[1]);
   const key = init.headers["x-goog-api-key"];
   const body = JSON.parse(init.body);
@@ -53,10 +82,18 @@ const env = { DB: makeD1(), ADMIN_PASSWORD: "gizli-sifre", GEMINI_KEY: "SERVER-K
 keyBehavior[env.GEMINI_KEY] = "ok";
 const FRIEND_KEY = "FRIEND-KEY-aaaaaaaaaaaaaaaa";
 
+const pending = [];
+const ctx = { waitUntil: (p) => pending.push(p) };
+const settle = async () => { while (pending.length) await pending.shift(); };
 const call = async (path, { method = "POST", body, headers = {} } = {}) => {
   const res = await worker.fetch(new Request("https://efex.test" + path, {
     method, headers: { "content-type": "application/json", ...headers }, body: body ? JSON.stringify(body) : undefined,
-  }), env);
+  }), env, ctx);
+  if ((res.headers.get("content-type") || "").includes("octet-stream")) {
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    await settle();
+    return { status: res.status, bytes, headers: res.headers };
+  }
   const ct = res.headers.get("content-type") || "";
   return { status: res.status, data: ct.includes("json") ? await res.json() : await res.text() };
 };
@@ -69,7 +106,7 @@ const t = async (name, fn) => { calls.length = 0; await fn(); passed++; console.
 
 // ---------------------------------------------------------------- temel
 await t("ping çalışıyor", async () => {
-  assert.equal((await call("/api/ping", { method: "GET" })).data.version, "0.5.0");
+  assert.equal((await call("/api/ping", { method: "GET" })).data.version, "0.6.0");
 });
 
 await t("panel sayfası geliyor ve içindeki JS hatasız", async () => {
@@ -218,6 +255,70 @@ await t("varsayılan günlük hak 60000", async () => {
   const m = (await admin("overview")).data.members.find((x) => x.code === c);
   assert.equal(m.daily_limit, 60000);
   await admin("members/delete", { code: c });
+});
+
+// ---------------------------------------------------------------- dublaj (beta)
+await t("dublaj: ilk model yoksa sıradakiyle akışlı ses gelir, havuza girer", async () => {
+  ttsBehavior["gemini-3.8-flash-tts"] = "ok";
+  ttsCalls.length = 0;
+  const r = await member("/api/speak", { text: "Arabaya bin!", voice: "Charon", persona: "man_low", style: "loud" }, code);
+  assert.equal(r.status, 200);
+  assert.equal(r.bytes.length, 5000);
+  assert.equal(r.headers.get("x-sample-rate"), "24000");
+  assert.equal(r.headers.get("x-efex-cached"), "0");
+  assert.deepEqual(ttsCalls.map((c) => c.model), ["gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"]);
+  assert.equal(ttsCalls[1].voice, "Charon");
+  assert.match(ttsCalls[1].prompt, /bağırır gibi/);
+  assert.match(ttsCalls[1].prompt, /Arabaya bin!/);
+});
+
+await t("dublaj: aynı replik ikinci kez havuzdan anında gelir, Google'a gitmez", async () => {
+  ttsCalls.length = 0;
+  const r = await member("/api/speak", { text: "Arabaya bin!", voice: "Charon", persona: "man_low", style: "loud" }, code2, { device: "tv-2" });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("x-efex-cached"), "1");
+  assert.equal(r.bytes.length, 5000);
+  assert.equal(r.bytes[0], 1);
+  assert.equal(r.bytes[4999], 2);
+  assert.equal(ttsCalls.length, 0);
+});
+
+await t("dublaj: farklı ses ya da ton ayrı üretilir", async () => {
+  ttsCalls.length = 0;
+  await member("/api/speak", { text: "Arabaya bin!", voice: "Kore", persona: "woman_low", style: "loud" }, code);
+  assert.equal(ttsCalls.length >= 1, true);
+});
+
+await t("dublaj: geçersiz ses reddedilir", async () => {
+  const r = await member("/api/speak", { text: "Merhaba", voice: "Bilinmeyen", persona: "man_low" }, code);
+  assert.equal(r.status, 400);
+});
+
+await t("dublaj: ses gelmezse ya da modeller yoksa anlaşılır hata, panelde Google mesajı", async () => {
+  ttsBehavior["gemini-3.8-flash-tts"] = "empty";
+  const r = await member("/api/speak", { text: "Hiç ses yok", voice: "Puck", persona: "man_high" }, code);
+  assert.equal(r.status, 502);
+  assert.equal(r.data.reason, "model");
+  const o = await admin("overview");
+  assert.match(o.data.ttsStatus.value, /^model\|/);
+  assert.match(o.data.ttsStatus.value, /gemini-3.8-flash-lite-tts: HTTP 404/);
+  ttsBehavior["gemini-3.8-flash-tts"] = "ok";
+});
+
+await t("dublaj: TTS_MODEL önce denenir", async () => {
+  env.TTS_MODEL = "ozel-tts";
+  ttsBehavior["ozel-tts"] = "ok";
+  ttsCalls.length = 0;
+  await member("/api/speak", { text: "Özel model", voice: "Leda", persona: "woman_high" }, code);
+  assert.equal(ttsCalls[0].model, "ozel-tts");
+  delete env.TTS_MODEL;
+});
+
+await t("dublaj: panel istatistikleri", async () => {
+  const o = await admin("overview");
+  assert.ok(o.data.today.tts_lines >= 3);
+  assert.ok(o.data.today.tts_cached >= 1);
+  assert.ok(o.data.audioPool.n >= 2);
 });
 
 // ---------------------------------------------------------------- yönetim

@@ -2,7 +2,7 @@
 // ---------------------------------------------------------------- giriş noktası
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
@@ -34,6 +34,7 @@ export default {
       if (path.startsWith(adminBase + "/api/")) return await handleAdminApi(request, env, "/admin/api/" + path.slice(adminBase.length + 5));
       if (path === "/api/login" && request.method === "POST") return await handleLogin(request, env);
       if (path === "/api/translate" && request.method === "POST") return await handleTranslate(request, env);
+      if (path === "/api/speak" && request.method === "POST") return await handleSpeak(request, env, ctx);
       return err("Bulunamadı", 404);
     } catch (e) {
       console.error(e);

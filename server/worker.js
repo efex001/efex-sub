@@ -19,12 +19,13 @@
  *  - DEFAULT_DAILY_LIMIT   : yeni kodlar için kişi başı günlük karakter hakkı (varsayılan 60000)
  *  - ADMIN_PATH            : panelin gizli adresi (ör. "panel-7k2q" → /panel-7k2q). Yazılırsa /admin kapanır
  *  - APK_URL               : /indir adresinin yönlendireceği APK (varsayılan GitHub'daki son sürüm)
+ *  - TTS_MODEL             : dublaj (beta) için Gemini ses modeli; yazılmazsa sırayla denenir
  *
  * Güvenlik: yanlış panel şifresi IP başına 5 denemede 30 dk, geçersiz arkadaş kodu
  * IP başına 10 denemede 30 dk kilitlenir.
  */
 
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 const MAX_LINES_PER_REQUEST = 8;
 const MAX_LINE_LENGTH = 400;
 
@@ -119,6 +120,8 @@ async function ensureSchema(db) {
       cached INTEGER NOT NULL DEFAULT 0,
       own_chars INTEGER NOT NULL DEFAULT 0,
       device_lines INTEGER NOT NULL DEFAULT 0,
+      tts_lines INTEGER NOT NULL DEFAULT 0,
+      tts_cached INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (code, day)
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS translations (
@@ -127,6 +130,17 @@ async function ensureSchema(db) {
       target TEXT NOT NULL,
       provider TEXT NOT NULL,
       edited INTEGER NOT NULL DEFAULT 0,
+      hits INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS audio (
+      hash TEXT PRIMARY KEY,
+      text TEXT NOT NULL,
+      voice TEXT NOT NULL,
+      style TEXT NOT NULL,
+      rate INTEGER NOT NULL,
+      pcm BLOB NOT NULL,
+      model TEXT NOT NULL,
       hits INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     )`),
@@ -151,6 +165,8 @@ async function ensureSchema(db) {
     "ALTER TABLE members ADD COLUMN key_state_at TEXT",
     "ALTER TABLE usage ADD COLUMN own_chars INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE usage ADD COLUMN device_lines INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE usage ADD COLUMN tts_lines INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE usage ADD COLUMN tts_cached INTEGER NOT NULL DEFAULT 0",
   ];
   for (const m of migrations) {
     try {
@@ -543,6 +559,209 @@ async function handleTranslate(request, env) {
   return json(response);
 }
 
+// ---------------------------------------------------------------- dublaj (beta)
+
+/** TV uygulamasıyla aynı liste: sesler, karakterin cinsiyetine ve ses kalınlığına göre gruplu */
+export const VOICES = {
+  man_low: ["Charon", "Algenib", "Orus", "Alnilam", "Rasalgethi"],
+  man_mid: ["Iapetus", "Schedar", "Umbriel", "Achird", "Sadaltager"],
+  man_high: ["Puck", "Fenrir", "Zubenelgenubi", "Sadachbia", "Enceladus"],
+  woman_low: ["Gacrux", "Kore", "Vindemiatrix"],
+  woman_mid: ["Aoede", "Despina", "Erinome", "Pulcherrima", "Sulafat"],
+  woman_high: ["Leda", "Zephyr", "Laomedeia", "Achernar", "Autonoe", "Callirrhoe"],
+};
+const ALL_VOICES = new Set(Object.values(VOICES).flat());
+
+const PERSONA_TEXT = {
+  man_low: "kalın ve tok sesli, olgun bir adam",
+  man_mid: "orta tonda sesli bir adam",
+  man_high: "genç, ince sesli bir adam",
+  woman_low: "kalın sesli, olgun bir kadın",
+  woman_mid: "orta tonda sesli bir kadın",
+  woman_high: "genç, ince sesli bir kadın",
+};
+const STYLE_TEXT = {
+  normal: "doğal, sohbet eder gibi",
+  loud: "yüksek sesle, gergin ve enerjik, bağırır gibi",
+  quiet: "alçak sesle, sakin, neredeyse fısıldar gibi",
+};
+const TTS_RATE = 24000;
+const MAX_AUDIO_BYTES = 1_900_000;
+
+function ttsModels(env) {
+  const list = [env.TTS_MODEL, "gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts", "gemini-2.5-flash-preview-tts"];
+  return [...new Set(list.filter(Boolean))];
+}
+
+function b64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** SSE akışından ses parçalarını çıkarır */
+async function* sseAudioChunks(body) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (value) buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf("\n")) !== -1) {
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 1);
+      if (!line.startsWith("data:")) continue;
+      let evt;
+      try {
+        evt = JSON.parse(line.slice(5).trim());
+      } catch {
+        continue;
+      }
+      for (const part of evt?.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData?.data) yield b64ToBytes(part.inlineData.data);
+      }
+    }
+    if (done) break;
+  }
+}
+
+/** Bir modelle seslendirmeyi başlatır; ilk ses parçası gelene kadar bekler (gelmezse sıradaki model) */
+async function startTts(text, voice, persona, style, env) {
+  const prompt = `Bir video oyunu karakterini Türkçe seslendiriyorsun: ${PERSONA_TEXT[persona]}. Ton: ${STYLE_TEXT[style]}. Yalnızca şu repliği oku: ${text}`;
+  const details = [];
+  let sawQuota = false;
+  for (const model of ttsModels(env)) {
+    let res;
+    try {
+      res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_KEY },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+          },
+        }),
+      });
+    } catch (e) {
+      details.push(`${model}: ${e.message || e}`);
+      continue;
+    }
+    if (!res.ok) {
+      const e = await classifyGeminiError(res, model);
+      details.push(e.detail);
+      if (e.kind === "invalid_key") throw e;
+      if (e.kind === "quota") sawQuota = true;
+      continue;
+    }
+    const it = sseAudioChunks(res.body);
+    const first = await it.next();
+    if (first.done) {
+      details.push(`${model}: ses gelmedi`);
+      continue;
+    }
+    return { model, first: first.value, rest: it };
+  }
+  const err = new ProviderError(sawQuota ? "quota" : "model");
+  err.detail = details.join(" | ");
+  throw err;
+}
+
+async function handleSpeak(request, env, ctx) {
+  const db = env.DB;
+  const { member, error } = await authMember(request, db);
+  if (error) return error;
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return err("Geçersiz istek");
+  }
+  const text = normalizeLine(body?.text);
+  const voice = String(body?.voice || "");
+  const persona = String(body?.persona || "");
+  const style = STYLE_TEXT[body?.style] ? body.style : "normal";
+  if (!text || text.length > 300) return err("Metin boş ya da çok uzun");
+  if (!ALL_VOICES.has(voice) || !PERSONA_TEXT[persona]) return err("Geçersiz ses");
+
+  const day = today();
+  const hash = await sha256(`${voice}|${persona}|${style}|${text}`);
+  const later = (p) => (ctx?.waitUntil ? ctx.waitUntil(p) : p);
+  const countUsage = (chars, cached) =>
+    db
+      .prepare(
+        `INSERT INTO usage (code, day, chars, tts_lines, tts_cached) VALUES (?, ?, ?, 1, ?)
+         ON CONFLICT(code, day) DO UPDATE SET chars = chars + excluded.chars,
+           tts_lines = tts_lines + 1, tts_cached = tts_cached + excluded.tts_cached`
+      )
+      .bind(member.code, day, chars, cached ? 1 : 0)
+      .run();
+
+  // 1) Ses havuzu: daha önce üretilmiş ses anında gelir
+  const row = await db.prepare("SELECT pcm, rate FROM audio WHERE hash = ?").bind(hash).first();
+  if (row) {
+    await later(Promise.all([db.prepare("UPDATE audio SET hits = hits + 1 WHERE hash = ?").bind(hash).run(), countUsage(0, true)]));
+    // D1, BLOB'u sürüme göre dizi ya da ArrayBuffer olarak döndürebilir
+    const pcm = Array.isArray(row.pcm) ? Uint8Array.from(row.pcm) : new Uint8Array(row.pcm.buffer ? row.pcm.buffer.slice(row.pcm.byteOffset || 0, (row.pcm.byteOffset || 0) + row.pcm.byteLength) : row.pcm);
+    return new Response(pcm, {
+      headers: { "content-type": "application/octet-stream", "x-sample-rate": String(row.rate), "x-efex-cached": "1", "cache-control": "no-store" },
+    });
+  }
+
+  // 2) Günlük hak (çeviriyle ortak)
+  if (!env.GEMINI_KEY) return err("Dublaj için Gemini anahtarı gerekli", 503, { reason: "no_key" });
+  const usage = await getUsage(db, member.code, day);
+  if (usage.chars + text.length > member.daily_limit) return err("Günlük hak doldu", 429, { reason: "daily_limit" });
+
+  // 3) Gemini ile seslendir, gelen parçaları anında TV'ye aktar
+  let started;
+  try {
+    started = await startTts(text, voice, persona, style, env);
+    await setStatus(db, "tts", `ok|${started.model}`);
+  } catch (e) {
+    await setStatus(db, "tts", `${e.kind || "server"}|gemini|${e.detail || ""}`);
+    return err("Dublaj şu an yapılamıyor", 502, { reason: e.kind || "server" });
+  }
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const pump = (async () => {
+    const parts = [started.first];
+    let total = started.first.length;
+    let complete = false;
+    try {
+      await writer.write(started.first);
+      for await (const chunk of started.rest) {
+        parts.push(chunk);
+        total += chunk.length;
+        await writer.write(chunk);
+      }
+      complete = true;
+    } catch (e) {
+      console.error("tts stream", e);
+    } finally {
+      try { await writer.close(); } catch {}
+    }
+    await countUsage(text.length, false);
+    if (complete && total > 1000 && total <= MAX_AUDIO_BYTES) {
+      const pcm = new Uint8Array(total);
+      let off = 0;
+      for (const p of parts) { pcm.set(p, off); off += p.length; }
+      await db
+        .prepare("INSERT OR IGNORE INTO audio (hash, text, voice, style, rate, pcm, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(hash, text, voice, `${persona}/${style}`, TTS_RATE, pcm.buffer, started.model, nowIso())
+        .run();
+    }
+  })();
+  later(pump);
+  return new Response(readable, {
+    headers: { "content-type": "application/octet-stream", "x-sample-rate": String(TTS_RATE), "x-efex-cached": "0", "cache-control": "no-store" },
+  });
+}
+
 // ---------------------------------------------------------------- yönetim API'si
 
 function isAdmin(request, env) {
@@ -570,7 +789,8 @@ async function handleAdminApi(request, env, path) {
         `SELECT m.code, m.name, m.active, m.daily_limit, m.device_id IS NOT NULL AS locked,
                 m.created_at, m.last_seen, m.has_own_key, m.key_state, m.key_state_at,
                 COALESCE(u.chars, 0) AS used_today, COALESCE(u.lines, 0) AS lines_today,
-                COALESCE(u.own_chars, 0) AS own_today, COALESCE(u.device_lines, 0) AS device_today
+                COALESCE(u.own_chars, 0) AS own_today, COALESCE(u.device_lines, 0) AS device_today,
+                COALESCE(u.tts_lines, 0) AS tts_today
          FROM members m LEFT JOIN usage u ON u.code = m.code AND u.day = ?
          ORDER BY m.created_at DESC`
       )
@@ -579,11 +799,13 @@ async function handleAdminApi(request, env, path) {
     const pool = await db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(hits), 0) AS hits FROM translations").first();
     const todayTotals = await db
       .prepare(
-        "SELECT COALESCE(SUM(chars),0) AS chars, COALESCE(SUM(own_chars),0) AS own_chars, COALESCE(SUM(lines),0) AS lines, COALESCE(SUM(cached),0) AS cached, COALESCE(SUM(device_lines),0) AS device_lines FROM usage WHERE day = ?"
+        "SELECT COALESCE(SUM(chars),0) AS chars, COALESCE(SUM(own_chars),0) AS own_chars, COALESCE(SUM(lines),0) AS lines, COALESCE(SUM(cached),0) AS cached, COALESCE(SUM(device_lines),0) AS device_lines, COALESCE(SUM(tts_lines),0) AS tts_lines, COALESCE(SUM(tts_cached),0) AS tts_cached FROM usage WHERE day = ?"
       )
       .bind(day)
       .first();
     const serverStatus = await db.prepare("SELECT value, updated_at FROM status WHERE name = 'server_key'").first();
+    const ttsStatus = await db.prepare("SELECT value, updated_at FROM status WHERE name = 'tts'").first();
+    const audioPool = await db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(hits), 0) AS hits, COALESCE(SUM(LENGTH(pcm)), 0) AS bytes FROM audio").first();
     return json({
       ok: true,
       version: VERSION,
@@ -594,6 +816,9 @@ async function handleAdminApi(request, env, path) {
       hiddenPath: !!env.ADMIN_PATH,
       serverProvider: serverProvider(env),
       serverStatus,
+      ttsStatus,
+      ttsModels: ttsModels(env),
+      audioPool,
       members: members.results,
       pool,
       today: todayTotals,
@@ -723,6 +948,8 @@ const ADMIN_HTML = `<!DOCTYPE html>
     <div class="stat"><b id="sCached">0</b><span>havuzdan bedava geldi</span></div>
     <div class="stat"><b id="sDevice">0</b><span>çevrilemedi (İngilizce kaldı)</span></div>
     <div class="stat"><b id="sChars">0</b><span>çevrilen karakter (ücretli)</span></div>
+    <div class="stat"><b id="sTts">0</b><span>dublaj satırı (beta)</span></div>
+    <div class="stat"><b id="sTtsCached">0</b><span>dublaj havuzdan geldi</span></div>
   </div>
   <div class="card sub" id="engine"></div>
 
@@ -781,14 +1008,25 @@ async function load(){
   $("sCached").textContent = fmt(d.today.cached);
   $("sDevice").textContent = fmt(d.today.device_lines);
   $("sChars").textContent = fmt(d.today.chars);
+  $("sTts").textContent = fmt(d.today.tts_lines);
+  $("sTtsCached").textContent = fmt(d.today.tts_cached);
   $("engine").innerHTML = "Modeller: <b>" + esc(d.models.join(" → ")) + "</b><br>Gemini anahtarı: " +
-    (d.keyConfigured ? '<span class="k-ok">tanımlı</span>' : '<span class="k-bad">tanımlı değil — Cloudflare ayarlarına GEMINI_KEY ekle</span>');
+    (d.keyConfigured ? '<span class="k-ok">tanımlı</span>' : '<span class="k-bad">tanımlı değil — Cloudflare ayarlarına GEMINI_KEY ekle</span>') +
+    "<br>Dublaj (beta) modelleri: <b>" + esc(d.ttsModels.join(" → ")) + "</b>" +
+    "<br>Ses havuzu: " + fmt(d.audioPool.n) + " replik · " + (d.audioPool.bytes / 1048576).toFixed(1) + " MB";
   const w = [];
   if (d.serverStatus && !String(d.serverStatus.value).startsWith("ok")) {
     const parts = String(d.serverStatus.value).split("|");
     const kind = parts[0], detail = parts.slice(2).join("|");
     w.push("<b>Gemini anahtarı:</b> " + esc(REASONS[kind] || kind) + " (" + esc(ago(d.serverStatus.updated_at)) + ")" +
       (detail ? '<div class="sub" style="margin-top:6px;word-break:break-word">Google mesajı: ' + esc(detail) + '</div>' : ""));
+  }
+  if (d.ttsStatus && !String(d.ttsStatus.value).startsWith("ok")) {
+    const tp = String(d.ttsStatus.value).split("|");
+    const td = tp.slice(2).join("|");
+    w.push("<b>Dublaj (beta):</b> " + esc(REASONS[tp[0]] || tp[0]) + " (" + esc(ago(d.ttsStatus.updated_at)) + ")" +
+      (td ? '<div class="sub" style="margin-top:6px;word-break:break-word">Google mesajı: ' + esc(td) + '</div>' : "") +
+      '<div class="sub">Model adı değiştiyse Cloudflare ayarlarına TTS_MODEL değişkeni ekle.</div>');
   }
   if (d.weakPassword) w.push("<b>Panel şifren kısa:</b> Cloudflare'de ADMIN_PASSWORD'ü en az 12 karakterlik bir şifreyle değiştir.");
   if (!d.hiddenPath) w.push("<b>Panel adresi tahmin edilebilir:</b> Cloudflare'e ADMIN_PATH değişkeni ekleyip paneli gizli bir adrese taşı.");
@@ -866,7 +1104,7 @@ if (PW) load().catch(() => show(false));
 // ---------------------------------------------------------------- giriş noktası
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
@@ -898,6 +1136,7 @@ export default {
       if (path.startsWith(adminBase + "/api/")) return await handleAdminApi(request, env, "/admin/api/" + path.slice(adminBase.length + 5));
       if (path === "/api/login" && request.method === "POST") return await handleLogin(request, env);
       if (path === "/api/translate" && request.method === "POST") return await handleTranslate(request, env);
+      if (path === "/api/speak" && request.method === "POST") return await handleSpeak(request, env, ctx);
       return err("Bulunamadı", 404);
     } catch (e) {
       console.error(e);

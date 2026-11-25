@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
 
 #include "audio-output.h"
+#include "efex-audio.h"
 
 #include "circular-buf.hpp"
 
@@ -157,6 +158,9 @@ extern "C" void android_chiaki_audio_output_frame(int16_t *buf, size_t samples_c
 {
 	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
 
+	// Efex Sub: dublaj için konuşanın sesini dinle
+	efex_audio_tap(buf, samples_count, ao->channels, ao->rate);
+
 	size_t buf_size = samples_count * sizeof(int16_t);
 	size_t pushed = ao->buf.Push(reinterpret_cast<uint8_t *>(buf), buf_size);
 	ao->queued.fetch_add(static_cast<int64_t>(pushed), std::memory_order_relaxed);
@@ -224,6 +228,8 @@ oboe::DataCallbackResult AudioOutputCallback::onAudioReady(oboe::AudioStream *st
 
 	size_t buf_size_delivered = audio_output->buf.Pop(buf, buf_size_requested);
 	audio_output->queued.fetch_sub(static_cast<int64_t>(buf_size_delivered), std::memory_order_relaxed);
+	// Efex Sub: dublaj konuşurken oyun sesini kıs
+	efex_audio_apply_gain(reinterpret_cast<int16_t *>(buf), buf_size_delivered / sizeof(int16_t));
 	catch_up(audio_output, stream, num_frames);
 
 	if(buf_size_delivered < buf_size_requested)

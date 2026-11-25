@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
@@ -49,7 +50,9 @@ class EfexSettingsForm(
 
 		content.addView(label("Hazır ayarlar", 14f, dimColor))
 		val presets = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-		presets.addView(smallButton("Standart") { set(EfexSettings(enabled = current.enabled, showStatus = current.showStatus)) })
+		presets.addView(smallButton("Standart") {
+			set(EfexSettings(enabled = current.enabled, showStatus = current.showStatus, dubEnabled = current.dubEnabled, dubGameVolume = current.dubGameVolume))
+		})
 		presets.addView(smallButton("Altyazı yukarıda") {
 			set(current.copy().apply { regionTop = 0.55f; regionBottom = 0.85f; subtitleBottom = 0.17f })
 		})
@@ -70,8 +73,41 @@ class EfexSettingsForm(
 		addSlider(content, "Kutu koyuluğu", 0, 100, { (current.backgroundAlpha * 100).roundToInt() },
 			{ current.backgroundAlpha = it / 100f }) { "%$it" }
 
+		// ---- Dublaj (beta)
+		val dubHeader = LinearLayout(context).apply {
+			orientation = LinearLayout.HORIZONTAL
+			gravity = Gravity.CENTER_VERTICAL
+			setPadding(0, dp(18f), 0, dp(2f))
+		}
+		dubHeader.addView(TextView(context).apply {
+			text = "Türkçe dublaj"
+			setTextColor(textColor)
+			setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+		})
+		dubHeader.addView(betaBadge())
+		content.addView(dubHeader)
+		content.addView(label("Karakterler, orijinal seslerine benzeyen farklı Türkçe seslerle konuşur. Türkçe konuşurken oyunun sesi kısılır.", 12f, dimColor))
+		addCheck(content, "Dublajı aç", { current.dubEnabled }) { current.dubEnabled = it }
+		addSlider(content, "Dublaj sırasında oyun sesi", 0, 100, { (current.dubGameVolume * 100).roundToInt() },
+			{ current.dubGameVolume = it / 100f }) { "%$it" }
+
 		addCheck(content, "Durum satırını göster (test için)", { current.showStatus }) { current.showStatus = it }
 		return content
+	}
+
+	/** Turuncu "BETA" etiketi */
+	private fun betaBadge() = TextView(context).apply {
+		text = "BETA"
+		setTextColor(Color.parseColor("#111111"))
+		setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+		typeface = android.graphics.Typeface.DEFAULT_BOLD
+		letterSpacing = 0.08f
+		setPadding(dp(7f), dp(1f), dp(7f), dp(1f))
+		background = android.graphics.drawable.GradientDrawable().apply {
+			setColor(accent)
+			cornerRadius = dp(8f).toFloat()
+		}
+		layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8f) }
 	}
 
 	private fun label(text: String, sizeSp: Float, color: Int) = TextView(context).apply {

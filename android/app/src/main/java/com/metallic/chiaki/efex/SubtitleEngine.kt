@@ -66,6 +66,9 @@ class SubtitleEngine(
 				main.post { debugView?.visibility = View.GONE }
 		}
 
+	/** Türkçe dublaj (beta); null ya da kapalıysa sadece altyazı */
+	@Volatile var dubbing: DubbingEngine? = null
+
 	@Volatile private var running = false
 	@Volatile private var busy = false
 	private var bitmap: Bitmap? = null
@@ -109,7 +112,7 @@ class SubtitleEngine(
 		{
 			if(!running)
 				return
-			if(!busy && settings.enabled)
+			if(!busy && (settings.enabled || dubbing?.enabled == true))
 				capture()
 			copyHandler.postDelayed(this, INTERVAL_MS)
 		}
@@ -236,14 +239,27 @@ class SubtitleEngine(
 		{
 			currentKey = key
 			val text = lastSeenText ?: raw
-			translate(key, text)
+			// Dublaj açıksa konuşanın sesini tam şimdi ölç (İngilizce replik şu an konuşuluyor)
+			val sample = dubbing?.takeIf { it.enabled }?.sampleVoice()
+			translate(key, text, sample)
 		}
 	}
 
-	private fun translate(key: String, text: String)
+	private fun deliver(key: String, tr: String, sample: VoiceSample?)
+	{
+		main.post {
+			if(currentKey != key)
+				return@post
+			if(settings.enabled)
+				showSubtitle(tr)
+			dubbing?.speak(tr, sample)
+		}
+	}
+
+	private fun translate(key: String, text: String, sample: VoiceSample?)
 	{
 		cache.get(key)?.let { tr ->
-			main.post { if(currentKey == key && settings.enabled) showSubtitle(tr) }
+			deliver(key, tr, sample)
 			return
 		}
 		netExecutor.execute {
@@ -269,7 +285,7 @@ class SubtitleEngine(
 			if(tr != null)
 			{
 				cache.put(key, tr)
-				main.post { if(currentKey == key && settings.enabled) showSubtitle(tr) }
+				deliver(key, tr, sample)
 			}
 			else
 			{

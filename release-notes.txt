@@ -1,3 +1,4 @@
-- Ayarlar → Hakkında: kaynak kodu bağlantısı Efex Sub'a yönlendirildi, emeği geçenlere Momiji eklendi
-- Momiji'den kalan bağış ve geri bildirim istemleri kaldırıldı
-- Gizlilik bilgisi Efex Sub'a göre güncellendi
+- YENİ: Türkçe dublaj (BETA). Altyazı ayarlarından açılır.
+  - Her karakter, orijinal sesine benzeyen farklı bir Türkçe sesle konuşur
+  - Türkçe konuşurken oyunun sesi kısılır (seviyesi ayarlanabilir)
+  - Daha önce seslendirilmiş replikler anında gelir

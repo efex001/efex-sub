@@ -43,6 +43,7 @@ import com.metallic.chiaki.databinding.ActivityStreamBinding
 import com.metallic.chiaki.efex.SubtitleEngine
 import com.metallic.chiaki.efex.EfexSettings
 import com.metallic.chiaki.efex.EfexSettingsDialog
+import com.metallic.chiaki.efex.DubbingEngine
 import com.metallic.chiaki.BuildConfig
 import com.metallic.chiaki.lib.ConnectInfo
 import com.metallic.chiaki.lib.ConnectVideoProfile
@@ -169,6 +170,9 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 		setupVideoOutput()
 		subtitleEngine = SubtitleEngine(this, { efexStreamView() }, binding.efexSubtitle, binding.efexNotice, binding.efexDebug)
 		efexSettings = EfexSettings.load(this)
+		dubbingEngine = DubbingEngine(this) { showEfexNotice(it) }
+		subtitleEngine?.dubbing = dubbingEngine
+		applyDubSettings(efexSettings)
 		binding.root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
 			// Sadece görüntünün yeri/boyutu değişince yeniden konumla (yoksa yerleşim döngüsü olur)
 			val v = efexStreamView()
@@ -264,6 +268,25 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 
 	// Efex Sub: altyazı okuma ve Türkçe gösterme
 	private var subtitleEngine: SubtitleEngine? = null
+	// Efex Sub: Türkçe dublaj (beta)
+	private var dubbingEngine: DubbingEngine? = null
+
+	private fun applyDubSettings(st: EfexSettings)
+	{
+		dubbingEngine?.let {
+			it.gameVolumeWhileSpeaking = st.dubGameVolume
+			it.enabled = st.dubEnabled
+		}
+	}
+
+	private fun showEfexNotice(text: String)
+	{
+		val v = binding.efexNotice
+		v.text = text
+		v.visibility = View.VISIBLE
+		v.alpha = 1f
+		v.animate().alpha(0f).setStartDelay(4000).setDuration(600).withEndAction { v.visibility = View.GONE }.start()
+	}
 
 	private lateinit var efexSettings: EfexSettings
 	private var efexPreviewing = false
@@ -315,6 +338,7 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 		EfexSettingsDialog(this, efexSettings, onPreview = { st ->
 			applyEfexLayout(st, true)
 			subtitleEngine?.settings = st
+			applyDubSettings(st)
 			if(st.enabled)
 			{
 				binding.efexSubtitle.text = "Örnek altyazı: Arabaya bin, gitmemiz lazım!"
@@ -328,6 +352,7 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 				efexSettings = saved
 			}
 			subtitleEngine?.settings = efexSettings
+			applyDubSettings(efexSettings)
 			binding.efexSubtitle.visibility = View.GONE
 			applyEfexLayout(efexSettings, false)
 			hideSystemUI()
@@ -496,6 +521,8 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 		getSystemService(DisplayManager::class.java)?.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
 		started = true
 		subtitleEngine?.start()
+		if(::efexSettings.isInitialized)
+			applyDubSettings(efexSettings)
 		updateSecondScreen()
 	}
 
@@ -540,6 +567,7 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 			binding.debandSurfaceView.onPause()
 		}
 		subtitleEngine?.stop()
+		dubbingEngine?.enabled = false
 		wifiLock?.release()
 		wifiLock = null
 		rumble?.stop()
@@ -847,6 +875,8 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 		super.onDestroy()
 		subtitleEngine?.release()
 		subtitleEngine = null
+		dubbingEngine?.release()
+		dubbingEngine = null
 		rumble?.stop()
 		videoRenderer?.release()
 		controlsDisposable.dispose()

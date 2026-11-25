@@ -17,7 +17,11 @@ class EfexSettings(
 	/** Altyazı kutusunun koyuluğu, 0..1 */
 	var backgroundAlpha: Float = DEFAULT_BG_ALPHA,
 	var enabled: Boolean = true,
-	var showStatus: Boolean = false
+	var showStatus: Boolean = false,
+	/** Türkçe dublaj (beta) */
+	var dubEnabled: Boolean = false,
+	/** Dublaj konuşurken oyun sesinin seviyesi, 0..1 */
+	var dubGameVolume: Float = DEFAULT_DUB_GAME_VOLUME
 )
 {
 	val regionLeft: Float get() = (1f - regionWidth) / 2f
@@ -31,6 +35,7 @@ class EfexSettings(
 		const val DEFAULT_SUBTITLE_BOTTOM = 0.05f
 		const val DEFAULT_TEXT_SIZE = 24
 		const val DEFAULT_BG_ALPHA = 0.9f
+		const val DEFAULT_DUB_GAME_VOLUME = 0.25f
 
 		private const val PREFS = "efex_sub_settings"
 
@@ -45,7 +50,9 @@ class EfexSettings(
 				textSizeSp = p.getInt("textSizeSp", DEFAULT_TEXT_SIZE),
 				backgroundAlpha = p.getFloat("backgroundAlpha", DEFAULT_BG_ALPHA),
 				enabled = p.getBoolean("enabled", true),
-				showStatus = p.getBoolean("showStatus", false)
+				showStatus = p.getBoolean("showStatus", false),
+				dubEnabled = p.getBoolean("dubEnabled", false),
+				dubGameVolume = p.getFloat("dubGameVolume", DEFAULT_DUB_GAME_VOLUME)
 			).also { it.sanitize() }
 		}
 	}
@@ -58,6 +65,7 @@ class EfexSettings(
 		subtitleBottom = subtitleBottom.coerceIn(0f, 0.6f)
 		textSizeSp = textSizeSp.coerceIn(14, 48)
 		backgroundAlpha = backgroundAlpha.coerceIn(0f, 1f)
+		dubGameVolume = dubGameVolume.coerceIn(0f, 1f)
 	}
 
 	fun save(context: Context)
@@ -72,8 +80,10 @@ class EfexSettings(
 			.putFloat("backgroundAlpha", backgroundAlpha)
 			.putBoolean("enabled", enabled)
 			.putBoolean("showStatus", showStatus)
+			.putBoolean("dubEnabled", dubEnabled)
+			.putFloat("dubGameVolume", dubGameVolume)
 			.apply()
 	}
 
-	fun copy() = EfexSettings(regionTop, regionBottom, regionWidth, subtitleBottom, textSizeSp, backgroundAlpha, enabled, showStatus)
+	fun copy() = EfexSettings(regionTop, regionBottom, regionWidth, subtitleBottom, textSizeSp, backgroundAlpha, enabled, showStatus, dubEnabled, dubGameVolume)
 }
