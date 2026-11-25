@@ -2,3 +2,4 @@
   - Her karakter, orijinal sesine benzeyen farklı bir Türkçe sesle konuşur
   - Türkçe konuşurken oyunun sesi kısılır (seviyesi ayarlanabilir)
   - Daha önce seslendirilmiş replikler anında gelir
+- Dublajda art arda gelen repliklerin geçişi düzeltildi

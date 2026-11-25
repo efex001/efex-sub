@@ -259,11 +259,11 @@ class DubbingEngine(context: Context, private val onNotice: (String) -> Unit)
 			var started = false
 			var carry = -1 // tek kalan bayt (16 bit örnek ikiye bölünürse)
 			val buf = ByteArray(8192)
-			conn.inputStream.use { input ->
-				while(true)
+			val input = conn.inputStream
+			try
+			{
+				while(generation.get() == gen && track === t)
 				{
-					if(generation.get() != gen || track !== t)
-						return
 					val n = input.read(buf)
 					if(n < 0)
 						break
@@ -294,10 +294,17 @@ class DubbingEngine(context: Context, private val onNotice: (String) -> Unit)
 					framesWritten += len / 2
 				}
 			}
+			finally
+			{
+				try { input.close() } catch(e: Exception) {}
+			}
+			// Yeni bir replik geldiyse kalan kısmı o replik bekleyip devralır
+			if(generation.get() != gen)
+				return
 			// Bitene kadar bekle, sonra oyun sesini geri aç
 			while(generation.get() == gen && track === t && remainingMs() > 0)
 				SystemClock.sleep(30)
-			if(track === t)
+			if(generation.get() == gen && track === t)
 			{
 				SystemClock.sleep(150)
 				stopCurrent()
