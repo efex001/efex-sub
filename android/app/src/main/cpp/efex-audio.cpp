@@ -118,13 +118,13 @@ static float pitch_of(const float *x, int n)
 extern "C" JNIEXPORT void JNICALL
 Java_com_metallic_chiaki_efex_EfexAudio_nativeSetGameGain(JNIEnv *env, jclass clazz, jfloat gain)
 {
-	game_gain.store(std::clamp(static_cast<float>(gain), 0.0f, 1.0f), std::memory_order_relaxed);
+	game_gain.store(std::min(1.0f, std::max(0.0f, static_cast<float>(gain))), std::memory_order_relaxed);
 }
 
 /** out = [ses düzeyi dB, temel frekans Hz (0: bulunamadı), sesli pencere oranı 0..1] */
 extern "C" void efex_audio_analyze(int window_ms, float out[3])
 {
-	int n = std::clamp<int>(window_ms, 200, RING_SECONDS * 1000) * TARGET_RATE / 1000;
+	int n = std::min<int>(std::max<int>(window_ms, 200), RING_SECONDS * 1000) * TARGET_RATE / 1000;
 	std::vector<float> x;
 	{
 		std::lock_guard<std::mutex> lock(ring_mutex);
