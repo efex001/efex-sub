@@ -1,5 +1,3 @@
-- YENİ: Türkçe dublaj (BETA). Altyazı ayarlarından açılır.
-  - Her karakter, orijinal sesine benzeyen farklı bir Türkçe sesle konuşur
-  - Türkçe konuşurken oyunun sesi kısılır (seviyesi ayarlanabilir)
-  - Daha önce seslendirilmiş replikler anında gelir
-- Dublajda art arda gelen repliklerin geçişi düzeltildi
+Efex Sub 0.5.2
+- Dublaj (beta): erkek karakterler için Türkçe dinleme testinde seçilen daha tok sesler kullanılıyor.
+- Kalın sesli karakterler biraz daha pes ve tok duyuluyor.

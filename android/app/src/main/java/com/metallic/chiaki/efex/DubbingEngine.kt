@@ -43,9 +43,10 @@ class DubbingEngine(context: Context, private val onNotice: (String) -> Unit)
 
 		/** Sunucuyla aynı liste (server/src/core.js VOICES) */
 		val VOICES = linkedMapOf(
-			"man_low" to listOf("Charon", "Algenib", "Orus", "Alnilam", "Rasalgethi"),
-			"man_mid" to listOf("Iapetus", "Schedar", "Umbriel", "Achird", "Sadaltager"),
-			"man_high" to listOf("Puck", "Fenrir", "Zubenelgenubi", "Sadachbia", "Enceladus"),
+			// Erkek sesleri Türkçe dinleme testinde seçildi (yumuşak sesler çıkarıldı)
+			"man_low" to listOf("Charon", "Algenib", "Alnilam"),
+			"man_mid" to listOf("Iapetus", "Schedar", "Achird"),
+			"man_high" to listOf("Puck", "Enceladus", "Sadachbia"),
 			"woman_low" to listOf("Gacrux", "Kore", "Vindemiatrix"),
 			"woman_mid" to listOf("Aoede", "Despina", "Erinome", "Pulcherrima", "Sulafat"),
 			"woman_high" to listOf("Leda", "Zephyr", "Laomedeia", "Achernar", "Autonoe", "Callirrhoe"))
@@ -200,7 +201,15 @@ class DubbingEngine(context: Context, private val onNotice: (String) -> Unit)
 		try { EfexAudio.nativeSetGameGain(g) } catch(e: Throwable) {}
 	}
 
-	private fun newTrack(): AudioTrack
+	/** Kalın sesli karakterlerde ses biraz pes çalınır ki daha tok çıksın */
+	private fun pitchFor(persona: String): Float = when(persona)
+	{
+		"man_low" -> 0.93f
+		"man_mid" -> 0.97f
+		else -> 1f
+	}
+
+	private fun newTrack(persona: String): AudioTrack
 	{
 		val minBuf = AudioTrack.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
 		val t = AudioTrack.Builder()
@@ -216,7 +225,7 @@ class DubbingEngine(context: Context, private val onNotice: (String) -> Unit)
 			.setBufferSizeInBytes(maxOf(minBuf * 4, SAMPLE_RATE)) // ~0,5 sn
 			.setTransferMode(AudioTrack.MODE_STREAM)
 			.build()
-		try { t.playbackParams = PlaybackParams().setSpeed(PLAYBACK_SPEED) } catch(e: Exception) {}
+		try { t.playbackParams = PlaybackParams().setSpeed(PLAYBACK_SPEED).setPitch(pitchFor(persona)) } catch(e: Exception) {}
 		return t
 	}
 
@@ -254,7 +263,7 @@ class DubbingEngine(context: Context, private val onNotice: (String) -> Unit)
 				return
 			}
 
-			val t = newTrack()
+			val t = newTrack(persona)
 			synchronized(this) { track = t; framesWritten = 0 }
 			var started = false
 			var carry = -1 // tek kalan bayt (16 bit örnek ikiye bölünürse)

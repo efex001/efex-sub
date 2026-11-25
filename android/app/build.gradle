@@ -30,8 +30,8 @@ android {
         applicationId "com.efex.sub"
         minSdk 24
         targetSdk 36
-        versionCode 7
-        versionName "0.5.1"
+        versionCode 8
+        versionName "0.5.2"
         buildConfigField "String", "EFEX_SERVER", "\"https://efex-sub.efekan-ucan.workers.dev\""
         buildConfigField "String", "EFEX_UPDATE_URL", "\"https://github.com/efex001/efex-sub/releases/latest/download/version.json\""
         buildConfigField "String", "EFEX_SOURCE_URL", "\"https://github.com/efex001/efex-sub\""

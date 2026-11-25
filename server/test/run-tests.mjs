@@ -107,7 +107,7 @@ const t = async (name, fn) => { calls.length = 0; await fn(); passed++; console.
 
 // ---------------------------------------------------------------- temel
 await t("ping çalışıyor", async () => {
-  assert.equal((await call("/api/ping", { method: "GET" })).data.version, "0.6.2");
+  assert.equal((await call("/api/ping", { method: "GET" })).data.version, "0.6.3");
 });
 
 await t("panel sayfası geliyor ve içindeki JS hatasız", async () => {

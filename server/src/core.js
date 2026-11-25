@@ -25,7 +25,7 @@
  * IP başına 10 denemede 30 dk kilitlenir.
  */
 
-const VERSION = "0.6.2";
+const VERSION = "0.6.3";
 const MAX_LINES_PER_REQUEST = 8;
 const MAX_LINE_LENGTH = 400;
 
@@ -565,14 +565,17 @@ async function handleTranslate(request, env) {
 
 /** TV uygulamasıyla aynı liste: sesler, karakterin cinsiyetine ve ses kalınlığına göre gruplu */
 export const VOICES = {
-  man_low: ["Charon", "Algenib", "Orus", "Alnilam", "Rasalgethi"],
-  man_mid: ["Iapetus", "Schedar", "Umbriel", "Achird", "Sadaltager"],
-  man_high: ["Puck", "Fenrir", "Zubenelgenubi", "Sadachbia", "Enceladus"],
+  // Erkek sesleri Türkçe dinleme testinde seçildi
+  man_low: ["Charon", "Algenib", "Alnilam"],
+  man_mid: ["Iapetus", "Schedar", "Achird"],
+  man_high: ["Puck", "Enceladus", "Sadachbia"],
   woman_low: ["Gacrux", "Kore", "Vindemiatrix"],
   woman_mid: ["Aoede", "Despina", "Erinome", "Pulcherrima", "Sulafat"],
   woman_high: ["Leda", "Zephyr", "Laomedeia", "Achernar", "Autonoe", "Callirrhoe"],
 };
-const ALL_VOICES = new Set(Object.values(VOICES).flat());
+// Eski uygulama sürümleri listeden çıkan sesleri hâlâ isteyebilir; onlar da kabul edilir
+const LEGACY_VOICES = ["Orus", "Rasalgethi", "Umbriel", "Sadaltager", "Fenrir", "Zubenelgenubi"];
+const ALL_VOICES = new Set([...Object.values(VOICES).flat(), ...LEGACY_VOICES]);
 
 // Not: Gemini API'deki ses modeli, metne eklenen her yönlendirmeyi (Türkçe ya da İngilizce)
 // sesli okudu ve İngilizce yönlendirme Türkçe telaffuzu bozdu (0.6.0 ve 0.6.1 testleri).
