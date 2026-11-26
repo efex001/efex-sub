@@ -72,6 +72,8 @@ class SubtitleEngine(
 
 	@Volatile private var running = false
 	@Volatile private var busy = false
+	/** Zayıf TV'lerde okuma yavaşsa aralık açılır ki görüntü takılmasın (350–900 ms) */
+	@Volatile private var intervalMs = INTERVAL_MS
 	private var bitmap: Bitmap? = null
 
 	// Okuma durumu (sadece ocrExecutor'da değişir)
@@ -118,7 +120,7 @@ class SubtitleEngine(
 				return
 			if(!busy && (settings.enabled || dubbing?.enabled == true))
 				capture()
-			copyHandler.postDelayed(this, INTERVAL_MS)
+			copyHandler.postDelayed(this, intervalMs)
 		}
 	}
 
@@ -178,7 +180,9 @@ class SubtitleEngine(
 			.addOnSuccessListener(ocrExecutor) { text ->
 				try
 				{
-					handleText(extractSubtitle(text, bmp.width), SystemClock.elapsedRealtime() - started)
+					val ms = SystemClock.elapsedRealtime() - started
+					intervalMs = (intervalMs * 0.8 + (ms * 1.5).coerceIn(INTERVAL_MS.toDouble(), 900.0) * 0.2).toLong()
+					handleText(extractSubtitle(text, bmp.width), ms)
 				}
 				finally
 				{

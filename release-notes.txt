@@ -1,4 +1,5 @@
-Efex Sub 0.6.0
+Efex Sub 0.6.1
+- Zayıf TV'lerde altyazı okuma hızı otomatik ayarlanıyor, oyun görüntüsü takılmıyor.
 - YENİ: Konuşanın adı. Oyun altyazısında konuşanın adı varsa ("Lucia: …") Türkçe altyazıda da turuncu olarak görünür.
 - YENİ: Dublajda her karakter hep aynı Türkçe sesle konuşur (TV'de saklanır). Ayarlardan sıfırlanabilir.
 - YENİ: Ayarlarda "Bağlantıyı test et": internet, sunucu, kod ve çeviri tek tuşla kontrol edilir.
