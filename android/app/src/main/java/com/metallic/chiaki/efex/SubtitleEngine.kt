@@ -246,29 +246,43 @@ class SubtitleEngine(
 			val text = lastSeenText ?: raw
 			// Dublaj açıksa konuşanın sesini tam şimdi ölç (İngilizce replik şu an konuşuluyor)
 			val sample = dubbing?.takeIf { it.enabled }?.sampleVoice()
-			translate(key, text, sample)
+			// "Lucia: …" → ad ayrı tutulur, sadece replik çevrilir
+			translate(key, SpeakerName.split(text), sample)
 		}
 	}
 
-	private fun deliver(key: String, tr: String, sample: VoiceSample?)
+	private fun deliver(key: String, tr: String, speaker: SpeakerName.Split, sample: VoiceSample?)
 	{
 		main.post {
 			if(currentKey != key)
 				return@post
 			if(settings.enabled)
-				showSubtitle(tr)
-			dubbing?.speak(tr, sample)
+				showSubtitle(withName(speaker.name, tr))
+			dubbing?.speak(tr, sample, speaker.name, speaker.generic)
 		}
 	}
 
-	private fun translate(key: String, text: String, sample: VoiceSample?)
+	/** Konuşanın adı turuncu ve kalın, sonra Türkçe replik */
+	private fun withName(name: String?, tr: String): CharSequence
 	{
-		cache.get(key)?.let { tr ->
-			deliver(key, tr, sample)
+		if(name == null)
+			return tr
+		val s = android.text.SpannableString("$name: $tr")
+		val end = name.length + 1
+		s.setSpan(android.text.style.ForegroundColorSpan(android.graphics.Color.parseColor("#FFB020")), 0, end, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+		s.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, end, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+		return s
+	}
+
+	private fun translate(key: String, speaker: SpeakerName.Split, sample: VoiceSample?)
+	{
+		val lineKey = keyOf(speaker.line)
+		cache.get(lineKey)?.let { tr ->
+			deliver(key, tr, speaker, sample)
 			return
 		}
 		netExecutor.execute {
-			val r = EfexClient.translate(appContext, listOf(text))
+			val r = EfexClient.translate(appContext, listOf(speaker.line))
 			val result = r.value
 			if(result == null)
 			{
@@ -302,9 +316,9 @@ class SubtitleEngine(
 			val tr = result.translations.firstOrNull()
 			if(tr != null)
 			{
-				cache.put(key, tr)
+				cache.put(lineKey, tr)
 				failedKey = null
-				deliver(key, tr, sample)
+				deliver(key, tr, speaker, sample)
 			}
 			else
 			{
@@ -351,7 +365,7 @@ class SubtitleEngine(
 
 	// ---- arayüz (ana iş parçacığı)
 
-	private fun showSubtitle(text: String)
+	private fun showSubtitle(text: CharSequence)
 	{
 		subtitleView.text = text
 		if(subtitleView.visibility != View.VISIBLE)

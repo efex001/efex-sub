@@ -2,7 +2,8 @@
 // Efex Sub: Türkçe dublaj (beta).
 //
 // - Konuşanın orijinal sesi dinlenir (kalınlık, ses düzeyi) ve buna benzeyen bir Türkçe ses seçilir.
-// - Aynı karakter (benzer ses kalınlığı) oyun boyunca aynı Türkçe sesle konuşur.
+// - Altyazıda konuşanın adı varsa ("Lucia: …") o karaktere bir ses verilir ve TV'de saklanır:
+//   karakter her oyunda aynı Türkçe sesle konuşur. Ad yoksa ses kalınlığına göre tahmin edilir.
 // - Ses sunucudan parça parça gelir ve gelir gelmez çalar; daha önce üretilmiş replikler havuzdan
 //   anında gelir. Türkçe konuşurken oyunun sesi kısılır.
 // - Gecikme birikmesin diye: yeni replik gelince eskisinin uzun bir kısmı kaldıysa kesilir.
@@ -100,11 +101,11 @@ class DubbingEngine(context: Context, private val onNotice: (String) -> Unit)
 	}
 
 	/** Çeviri gelince çağrılır */
-	fun speak(turkish: String, sample: VoiceSample?)
+	fun speak(turkish: String, sample: VoiceSample?, speaker: String? = null, generic: Boolean = false)
 	{
 		if(!enabled || turkish.isBlank())
 			return
-		val (persona, voice) = pickVoice(sample)
+		val (persona, voice) = pickVoice(sample, speaker?.takeIf { !generic })
 		val style = styleFor(sample)
 		val gen = generation.incrementAndGet()
 		// Eski replik çok uzun kaldıysa kes, kısa kaldıysa bitmesine izin ver
@@ -123,9 +124,26 @@ class DubbingEngine(context: Context, private val onNotice: (String) -> Unit)
 	// ---- ses seçimi
 
 	@Synchronized
-	private fun pickVoice(sample: VoiceSample?): Pair<String, String>
+	private fun pickVoice(sample: VoiceSample?, name: String?): Pair<String, String>
 	{
 		val pitch = sample?.takeIf { it.voiced >= 0.25f }?.pitchHz ?: 0f
+		if(name != null)
+		{
+			// Bu karaktere daha önce ses verildiyse hep o ses
+			SpeakerName.load(appContext, name)?.let { return it }
+			if(pitch > 0f)
+			{
+				// İlk kez: ses kalınlığına göre grup, grubun en az kullanılan sesi
+				val persona = personaFor(pitch)
+				val list = VOICES.getValue(persona)
+				val use = SpeakerName.usage(appContext, persona)
+				val start = Math.floorMod(name.lowercase().hashCode(), list.size)
+				val voice = list.indices.map { list[(start + it) % list.size] }.minByOrNull { use[it] ?: 0 } ?: list[start]
+				SpeakerName.save(appContext, name, persona, voice)
+				return persona to voice
+			}
+			// Ses ölçülemediyse kaydetme, sonraki replikte yeniden denenir
+		}
 		if(pitch <= 0f)
 		{
 			// Ölçülemediyse son konuşanın sesiyle devam et

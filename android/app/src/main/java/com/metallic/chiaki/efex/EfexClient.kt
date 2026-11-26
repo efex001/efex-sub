@@ -14,6 +14,15 @@ import java.util.UUID
 
 class EfexResult<T>(val value: T?, val error: String?, val reason: String? = null)
 
+/** Bağlantı testi ve kalan hak için */
+class AccountStatus(val name: String, val dailyLimit: Int, val usedToday: Int, val serverVersion: String, val ms: Long)
+{
+	val remaining get() = (dailyLimit - usedToday).coerceAtLeast(0)
+	val remainingPercent get() = if(dailyLimit <= 0) 0 else (remaining * 100L / dailyLimit).toInt()
+	/** Ortalama bir replik ~45 karakter */
+	val remainingLines get() = remaining / 45
+}
+
 class TranslationResult(
 	val translations: List<String?>,
 	/** "daily_limit", "quota", "invalid_key", ... when some lines could not be translated */
@@ -114,6 +123,32 @@ object EfexClient
 		catch(e: Exception)
 		{
 			EfexResult(savedName(context), null)
+		}
+	}
+
+	/**
+	 * Kodu, interneti ve sunucuyu yoklar. Ağ isteği yapar, ana iş parçacığında çağırma.
+	 * Hata nedeni: "network" (internet/sunucuya ulaşılamadı), "rejected" (kod), "server"
+	 */
+	fun status(context: Context): EfexResult<AccountStatus>
+	{
+		val code = savedCode(context) ?: return EfexResult(null, "Kod girilmemiş", "rejected")
+		val started = android.os.SystemClock.elapsedRealtime()
+		return try
+		{
+			val (status, json) = post(context, "/api/login", code, JSONObject())
+			val ms = android.os.SystemClock.elapsedRealtime() - started
+			when
+			{
+				status == 200 && json != null && json.optBoolean("ok") -> EfexResult(AccountStatus(
+					json.optString("name"), json.optInt("dailyLimit"), json.optInt("usedToday"), json.optString("version"), ms), null)
+				status in listOf(401, 403, 429) -> EfexResult(null, json?.optString("error")?.ifEmpty { null } ?: "Kod geçersiz", "rejected")
+				else -> EfexResult(null, json?.optString("error")?.ifEmpty { null } ?: "HTTP $status", "server")
+			}
+		}
+		catch(e: Exception)
+		{
+			EfexResult(null, e.message ?: "Ağ hatası", "network")
 		}
 	}
 

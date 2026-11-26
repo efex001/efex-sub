@@ -90,9 +90,96 @@ class EfexSettingsForm(
 		addCheck(content, "Dublajı aç", { current.dubEnabled }) { current.dubEnabled = it }
 		addSlider(content, "Dublaj sırasında oyun sesi", 0, 100, { (current.dubGameVolume * 100).roundToInt() },
 			{ current.dubGameVolume = it / 100f }) { "%$it" }
+		content.addView(label("Altyazıda konuşanın adı varsa (ör. \"Lucia: …\") her karakter hep aynı Türkçe sesle konuşur.", 12f, dimColor))
+		val voicesInfo = label("", 12f, dimColor)
+		fun refreshVoices() { voicesInfo.text = "Ses verilen karakter: ${SpeakerName.count(context)}" }
+		refreshVoices()
+		content.addView(buttonRow(smallButton("Karakter seslerini sıfırla") {
+			SpeakerName.reset(context)
+			refreshVoices()
+		}, voicesInfo))
+
+		// ---- Hesap ve bağlantı
+		content.addView(TextView(context).apply {
+			text = "Hesap ve bağlantı"
+			setTextColor(textColor)
+			setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+			setPadding(0, dp(18f), 0, dp(2f))
+		})
+		val quota = label("Bugün kalan çeviri hakkı: yükleniyor…", 13f, textColor)
+		val testResult = label("", 13f, textColor).apply { visibility = android.view.View.GONE }
+		content.addView(quota)
+		content.addView(buttonRow(smallButton("Bağlantıyı test et") { runTest(quota, testResult) }, null))
+		content.addView(testResult)
+		background { EfexClient.status(context) }.let { job ->
+			job { r -> quota.text = r.value?.let { quotaText(it) } ?: "Bugün kalan çeviri hakkı: öğrenilemedi (bağlantıyı test et)" }
+		}
 
 		addCheck(content, "Durum satırını göster (test için)", { current.showStatus }) { current.showStatus = it }
 		return content
+	}
+
+	private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+	/** İşi arka planda yapar, sonucu ana iş parçacığında verir */
+	private fun <T> background(work: () -> T): ((T) -> Unit) -> Unit = { done ->
+		Thread {
+			val r = work()
+			mainHandler.post { done(r) }
+		}.start()
+	}
+
+	private fun quotaText(s: AccountStatus) =
+		"Bugün kalan çeviri hakkı: %${s.remainingPercent} (yaklaşık ${"%,d".format(s.remainingLines).replace(',', '.')} replik) · gece yarısı yenilenir"
+
+	private fun runTest(quota: TextView, out: TextView)
+	{
+		out.visibility = android.view.View.VISIBLE
+		out.text = "Test ediliyor…"
+		background {
+			val lines = mutableListOf<String>()
+			val st = EfexClient.status(context)
+			val s = st.value
+			when
+			{
+				s != null ->
+				{
+					lines += "✓ İnternet ve sunucu çalışıyor (${s.ms} ms)"
+					lines += "✓ Kod geçerli: ${s.name}"
+					val tr = EfexClient.translate(context, listOf("Get in the car, we need to go."))
+					val t = tr.value?.translations?.firstOrNull()
+					lines += when
+					{
+						t != null -> "✓ Çeviri çalışıyor: \"$t\""
+						tr.value?.reason == "daily_limit" -> "✗ Bugünkü çeviri hakkı dolmuş, gece yarısı yenilenir"
+						else -> "✗ Çeviri yapılamadı: ${tr.value?.message ?: tr.error ?: "bilinmeyen hata"}"
+					}
+				}
+				st.reason == "network" -> lines += "✗ Sunucuya ulaşılamadı. TV'nin internete bağlı olduğunu kontrol et."
+				st.reason == "rejected" ->
+				{
+					lines += "✓ İnternet ve sunucu çalışıyor"
+					lines += "✗ Kod: ${st.error}"
+				}
+				else -> lines += "✗ Sunucu hata verdi: ${st.error}"
+			}
+			lines += "Efex Sub ${com.metallic.chiaki.BuildConfig.VERSION_NAME}" + (s?.let { " · sunucu ${it.serverVersion}" } ?: "")
+			Pair(lines.joinToString("\n"), s)
+		}.let { job ->
+			job { (text, s) ->
+				out.text = text
+				if(s != null) quota.text = quotaText(s)
+			}
+		}
+	}
+
+	private fun buttonRow(button: Button, side: TextView?) = LinearLayout(context).apply {
+		orientation = LinearLayout.HORIZONTAL
+		gravity = Gravity.CENTER_VERTICAL
+		setPadding(0, dp(6f), 0, 0)
+		button.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(12f) }
+		addView(button)
+		side?.let { it.setPadding(0, 0, 0, 0); addView(it) }
 	}
 
 	/** Turuncu "BETA" etiketi */

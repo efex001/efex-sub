@@ -1,4 +1,7 @@
-Efex Sub 0.5.3
-- Altyazı ve dublaj daha hızlı geliyor (sunucu bağlantısı açık tutuluyor).
-- İnternet bir anlık koparsa o replik birkaç saniye içinde yeniden çevriliyor; eski altyazı ekranda yanlış kalmıyor.
-- Güncelleme ekranı açılamayan TV'lerde uygulama artık kapanmıyor, ne yapılacağı yazıyor.
+Efex Sub 0.6.0
+- YENİ: Konuşanın adı. Oyun altyazısında konuşanın adı varsa ("Lucia: …") Türkçe altyazıda da turuncu olarak görünür.
+- YENİ: Dublajda her karakter hep aynı Türkçe sesle konuşur (TV'de saklanır). Ayarlardan sıfırlanabilir.
+- YENİ: Ayarlarda "Bağlantıyı test et": internet, sunucu, kod ve çeviri tek tuşla kontrol edilir.
+- YENİ: Ayarlarda bugün kalan çeviri hakkı görünür.
+- Altyazı ve dublaj daha hızlı geliyor; internet bir anlık koparsa replik yeniden çevriliyor.
+- Güncelleme ekranı açılamayan TV'lerde uygulama artık kapanmıyor.
