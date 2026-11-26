@@ -64,11 +64,14 @@ object EfexClient
 			val stream = if(status >= 400) conn.errorStream else conn.inputStream
 			val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
 			val json = try { JSONObject(text) } catch(e: Exception) { null }
+			// disconnect() çağrılmaz: akış sonuna kadar okununca bağlantı havuza döner ve
+			// sonraki çeviri yeni TLS el sıkışması beklemeden (~100-300 ms kazanç) gider
 			return Pair(status, json)
 		}
-		finally
+		catch(e: Exception)
 		{
 			conn.disconnect()
+			throw e
 		}
 	}
 

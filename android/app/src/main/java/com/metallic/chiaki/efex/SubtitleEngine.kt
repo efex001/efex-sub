@@ -44,6 +44,7 @@ class SubtitleEngine(
 		private const val MAX_BITMAP_WIDTH = 1280
 		private const val SAME_TEXT_RATIO = 0.82
 		private const val NOTICE_COOLDOWN_MS = 60_000L
+		private const val RETRY_MS = 2500L
 	}
 
 	private val appContext = context.applicationContext
@@ -81,6 +82,9 @@ class SubtitleEngine(
 	@Volatile private var currentKey: String? = null
 	private var lastNoticeAt = 0L
 	private var copyFailures = 0
+	/** Ağ hatasıyla çevrilemeyen replik ve yeniden denenebileceği an */
+	@Volatile private var failedKey: String? = null
+	@Volatile private var retryAt = 0L
 
 	fun start()
 	{
@@ -235,7 +239,8 @@ class SubtitleEngine(
 		debug("OCR ${ms}ms · ${raw.take(80)}")
 
 		val cur = currentKey
-		if(stableCount >= 2 && (cur == null || !similar(cur, key)))
+		val waitRetry = failedKey?.let { similar(it, key) } == true && SystemClock.elapsedRealtime() < retryAt
+		if(stableCount >= 2 && !waitRetry && (cur == null || !similar(cur, key)))
 		{
 			currentKey = key
 			val text = lastSeenText ?: raw
@@ -279,12 +284,26 @@ class SubtitleEngine(
 						main.post { showNotice("Efex Sub: $err") }
 					}
 				}
+				else
+				{
+					// Anlık ağ kopması: eski replik ekranda yanlış kalmasın, bu replik birazdan yeniden denensin
+					failedKey = key
+					retryAt = SystemClock.elapsedRealtime() + RETRY_MS
+					main.post {
+						if(currentKey == key)
+						{
+							currentKey = null
+							hideSubtitle()
+						}
+					}
+				}
 				return@execute
 			}
 			val tr = result.translations.firstOrNull()
 			if(tr != null)
 			{
 				cache.put(key, tr)
+				failedKey = null
 				deliver(key, tr, sample)
 			}
 			else

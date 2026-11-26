@@ -327,7 +327,9 @@ class DubbingEngine(context: Context, private val onNotice: (String) -> Unit)
 		}
 		finally
 		{
-			conn?.disconnect()
+			// Yarıda kesilen istek bağlantıyı kapatır; tamamlanan istek bağlantıyı havuza bırakır
+			if(generation.get() != gen || !enabled)
+				conn?.disconnect()
 		}
 	}
 

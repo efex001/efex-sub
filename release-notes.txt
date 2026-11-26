@@ -1,3 +1,4 @@
-Efex Sub 0.5.2
-- Dublaj (beta): erkek karakterler için Türkçe dinleme testinde seçilen daha tok sesler kullanılıyor.
-- Kalın sesli karakterler biraz daha pes ve tok duyuluyor.
+Efex Sub 0.5.3
+- Altyazı ve dublaj daha hızlı geliyor (sunucu bağlantısı açık tutuluyor).
+- İnternet bir anlık koparsa o replik birkaç saniye içinde yeniden çevriliyor; eski altyazı ekranda yanlış kalmıyor.
+- Güncelleme ekranı açılamayan TV'lerde uygulama artık kapanmıyor, ne yapılacağı yazıyor.

@@ -232,6 +232,18 @@ object UpdateChecker
 		val intent = Intent(Intent.ACTION_VIEW)
 			.setDataAndType(uri, "application/vnd.android.package-archive")
 			.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-		activity.startActivity(intent)
+		try
+		{
+			activity.startActivity(intent)
+		}
+		catch(e: Exception)
+		{
+			Log.w(TAG, "Kurulum ekranı açılamadı", e)
+			MaterialAlertDialogBuilder(activity)
+				.setTitle("Güncelleme kurulamadı")
+				.setMessage("Yeni sürümü Downloader'da 9936581 koduyla indirip kurabilirsin. Kodun ve ayarların silinmez.")
+				.setPositiveButton("Tamam", null)
+				.show()
+		}
 	}
 }
